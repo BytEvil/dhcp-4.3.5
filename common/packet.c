@@ -120,6 +120,9 @@ void assemble_hw_header (interface, buf, bufix, to)
 	case HTYPE_INFINIBAND:
 		log_error("Attempt to assemble hw header for infiniband");
 		break;
+	case HTYPE_PUREIP:
+		log_error("Attempt to assemble hw header for pure IP");
+		break;
 	case HTYPE_ETHER:
 	default:
 		assemble_ethernet_header(interface, buf, bufix, to);
@@ -213,6 +216,9 @@ ssize_t decode_hw_header (interface, buf, bufix, from)
 #endif
 	case HTYPE_INFINIBAND:
 		log_error("Attempt to decode hw header for infiniband");
+		return (0);
+	case HTYPE_PUREIP:
+		log_error("Attempt to decode hw header for pure IP");
 		return (0);
 	case HTYPE_ETHER:
 	default:

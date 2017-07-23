@@ -203,6 +203,32 @@ struct bpf_insn *bpf_fddi_filter = NULL;
 #endif
 
 int dhcp_bpf_filter_len = sizeof dhcp_bpf_filter / sizeof (struct bpf_insn);
+
+struct bpf_insn dhcp_bpf_ip_filter [] = {
+	/* Make sure it's a UDP packet... */
+	BPF_STMT (BPF_LD + BPF_B + BPF_ABS, 9),
+	BPF_JUMP (BPF_JMP + BPF_JEQ + BPF_K, IPPROTO_UDP, 0, 6),
+       
+	/* Make sure this isn't a fragment... */
+	BPF_STMT(BPF_LD + BPF_H + BPF_ABS, 6),
+	BPF_JUMP(BPF_JMP + BPF_JSET + BPF_K, 0x1fff, 4, 0),
+
+	/* Get the IP header length... */
+	BPF_STMT (BPF_LDX + BPF_B + BPF_MSH, 0),
+
+	/* Make sure it's to the right port... */
+	BPF_STMT (BPF_LD + BPF_H + BPF_IND, 2),
+	BPF_JUMP (BPF_JMP + BPF_JEQ + BPF_K, 37, 0, 1),             /* patch */
+
+	/* If we passed all the tests, ask for the whole packet. */
+	BPF_STMT(BPF_RET+BPF_K, (u_int)-1),
+
+	/* Otherwise, drop it. */
+	BPF_STMT(BPF_RET+BPF_K, 0),
+};
+
+int dhcp_bpf_ip_filter_len = sizeof dhcp_bpf_ip_filter / sizeof (struct bpf_insn);
+
 #if defined (HAVE_TR_SUPPORT)
 struct bpf_insn dhcp_bpf_tr_filter [] = {
         /* accept all token ring packets due to variable length header */

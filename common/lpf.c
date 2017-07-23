@@ -179,6 +179,9 @@ void if_deregister_send (info)
 extern struct sock_filter dhcp_bpf_filter [];
 extern int dhcp_bpf_filter_len;
 
+extern struct sock_filter dhcp_bpf_ip_filter [];
+extern int dhcp_bpf_ip_filter_len;
+
 #if defined (HAVE_TR_SUPPORT)
 extern struct sock_filter dhcp_bpf_tr_filter [];
 extern int dhcp_bpf_tr_filter_len;
@@ -186,6 +189,7 @@ static void lpf_tr_filter_setup (struct interface_info *);
 #endif
 
 static void lpf_gen_filter_setup (struct interface_info *);
+static void lpf_pureip_filter_setup (struct interface_info *);
 
 void if_register_receive (info)
 	struct interface_info *info;
@@ -212,6 +216,9 @@ void if_register_receive (info)
 		lpf_tr_filter_setup (info);
 	else
 #endif
+	if (info -> hw_address.hbuf [0] == HTYPE_PUREIP)
+		lpf_pureip_filter_setup (info);
+	else
 		lpf_gen_filter_setup (info);
 
 	if (!quiet_interface_discovery)
@@ -265,6 +272,39 @@ static void lpf_gen_filter_setup (info)
 		if (errno == ENOPROTOOPT || errno == EPROTONOSUPPORT ||
 		    errno == ESOCKTNOSUPPORT || errno == EPFNOSUPPORT ||
 		    errno == EAFNOSUPPORT) {
+			log_error ("socket: %m - make sure");
+			log_error ("CONFIG_PACKET (Packet socket) %s",
+				   "and CONFIG_FILTER");
+			log_error ("(Socket Filtering) are enabled %s",
+				   "in your kernel");
+			log_fatal ("configuration!");
+		}
+		log_fatal ("Can't install packet filter program: %m");
+	}
+}
+
+static void lpf_pureip_filter_setup (info)
+		struct interface_info *info;
+{
+		struct sock_fprog p;
+
+		memset(&p, 0, sizeof(p));
+
+	/* Set up the bpf filter program structure.    This is defined in
+	   bpf.c */
+	p.len = dhcp_bpf_ip_filter_len;
+	p.filter = dhcp_bpf_ip_filter;
+
+		/* Patch the server port into the LPF  program...
+	   XXX changes to filter program may require changes
+	   to the insn number(s) used below! XXX */
+	dhcp_bpf_ip_filter [6].k = ntohs ((short)local_port);
+
+	if (setsockopt (info -> rfdesc, SOL_SOCKET, SO_ATTACH_FILTER, &p,
+			sizeof p) < 0) {
+		if (errno == ENOPROTOOPT || errno == EPROTONOSUPPORT ||
+			errno == ESOCKTNOSUPPORT || errno == EPFNOSUPPORT ||
+			errno == EAFNOSUPPORT) {
 			log_error ("socket: %m - make sure");
 			log_error ("CONFIG_PACKET (Packet socket) %s",
 				   "and CONFIG_FILTER");
@@ -547,6 +587,10 @@ get_hw_addr(const char *name, struct hardware *hw) {
 			hw->hlen = 7;
 			hw->hbuf[0] = HTYPE_FDDI;
 			memcpy(&hw->hbuf[1], sa->sa_data, 6);
+			break;
+		case ARPHRD_NONE:
+			hw->hlen = 1;
+			hw->hbuf[0] = HTYPE_PUREIP;
 			break;
 		default:
 			log_fatal("Unsupported device type %ld for \"%s\"",
